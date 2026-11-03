@@ -1,15 +1,20 @@
 
 import ast
 import os
-import time
 import secrets
+import time
 
 from collections import defaultdict, deque
 from pathlib import Path
 from threading import Lock
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request, send_from_directory
+from flask import (
+    Flask,
+    jsonify,
+    request,
+    send_from_directory
+)
 from google import genai
 from google.genai import types
 
@@ -17,6 +22,9 @@ from google.genai import types
 BASE = Path(__file__).resolve().parent
 
 load_dotenv(BASE / ".env")
+
+from ranking import ranking_bp, preparar_banco
+
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 MODEL = os.getenv(
@@ -26,7 +34,7 @@ MODEL = os.getenv(
 
 if not API_KEY:
     raise RuntimeError(
-        "Configure GEMINI_API_KEY nas variáveis de ambiente."
+        "Configure GEMINI_API_KEY no ambiente."
     )
 
 
@@ -68,31 +76,34 @@ def carregar_personalidade():
             return str(valor.func.value.value).strip()
 
     raise RuntimeError(
-        "SYSTEM_PROMPT não encontrado no bot.py"
+        "SYSTEM_PROMPT não encontrado no bot.py."
     )
 
 
 PERSONALIDADE = carregar_personalidade()
 
 INSTRUCOES_SITE = """
-Você está conversando com visitantes do Kaory World.
+Você conversa com visitantes do Kaory World.
 
-Mantenha a personalidade e a lore oficial da Kaory Saito.
+Mantenha a personalidade e a lore oficial
+da Kaory Saito.
 
-Não use códigos de emojis exclusivos do Discord.
+Responda de maneira natural, divertida
+e coerente com a personalidade original.
 
-Responda de maneira natural, divertida e coerente
-com a personalidade original da Kaory.
+Não invente acontecimentos oficiais
+nem dados pessoais.
 
-Prefira respostas concisas, mas desenvolva quando
-o visitante pedir explicações mais longas.
-
-Não invente acontecimentos oficiais ou dados pessoais.
+Prefira respostas concisas, mas desenvolva
+quando o visitante pedir mais detalhes.
 """
 
 client = genai.Client(api_key=API_KEY)
 
 app = Flask(__name__, static_folder=None)
+
+app.register_blueprint(ranking_bp)
+preparar_banco()
 
 historicos = defaultdict(
     lambda: deque(maxlen=16)
@@ -104,58 +115,87 @@ controle = Lock()
 
 @app.get("/")
 def inicio():
-    return send_from_directory(BASE, "Kaory.HTML")
+    return send_from_directory(
+        BASE,
+        "Kaory.HTML"
+    )
 
 
 @app.get("/Kaory.CSS")
 def css():
-    return send_from_directory(BASE, "Kaory.CSS")
+    return send_from_directory(
+        BASE,
+        "Kaory.CSS"
+    )
 
 
 @app.get("/Kaory.js")
 def javascript():
-    return send_from_directory(BASE, "Kaory.js")
+    return send_from_directory(
+        BASE,
+        "Kaory.js"
+    )
 
 
 @app.get("/Kaory-extras.js")
 def extras():
-    return send_from_directory(BASE, "Kaory-extras.js")
+    return send_from_directory(
+        BASE,
+        "Kaory-extras.js"
+    )
 
 
 @app.get("/Kaory-magic.js")
 def magic():
-    return send_from_directory(BASE, "Kaory-magic.js")
+    return send_from_directory(
+        BASE,
+        "Kaory-magic.js"
+    )
 
 
 @app.get("/Kaory-surpresa.js")
 def surpresa():
-    return send_from_directory(BASE, "Kaory-surpresa.js")
+    return send_from_directory(
+        BASE,
+        "Kaory-surpresa.js"
+    )
 
 
 @app.get("/Kaory-musica.js")
 def musica():
-    return send_from_directory(BASE, "Kaory-musica.js")
+    return send_from_directory(
+        BASE,
+        "Kaory-musica.js"
+    )
 
 
 @app.get("/Kaory-entrada.js")
 def entrada():
-    return send_from_directory(BASE, "Kaory-entrada.js")
+    return send_from_directory(
+        BASE,
+        "Kaory-entrada.js"
+    )
 
 
 @app.get("/Kaory-diversao.js")
 def diversao():
-    return send_from_directory(BASE, "Kaory-diversao.js")
+    return send_from_directory(
+        BASE,
+        "Kaory-diversao.js"
+    )
 
 
 @app.get("/assets/<path:nome>")
 def assets(nome):
-    return send_from_directory(BASE / "assets", nome)
+    return send_from_directory(
+        BASE / "assets",
+        nome
+    )
 
 
 @app.post("/api/chat")
 def conversar():
     dados = request.get_json(silent=True) or {}
-
     mensagem = dados.get("mensagem", "")
 
     if not isinstance(mensagem, str):
@@ -187,7 +227,10 @@ def conversar():
     agora = time.monotonic()
 
     with controle:
-        anterior = ultimos_pedidos.get(sessao, 0)
+        anterior = ultimos_pedidos.get(
+            sessao,
+            0
+        )
 
         if agora - anterior < 3:
             return jsonify(
@@ -243,13 +286,13 @@ def conversar():
 
     except Exception:
         app.logger.exception(
-            "Falha ao consultar Gemini"
+            "Erro ao consultar Gemini."
         )
 
         return jsonify(
             erro=(
                 "Minha magia deu uma travadinha. "
-                "Tenta novamente!"
+                "Tenta novamente! 🥝"
             )
         ), 502
 
@@ -281,15 +324,12 @@ def conversar():
 
 if __name__ == "__main__":
     print()
-    print("======================================")
-    print("          KAORY WORLD ONLINE")
-    print("======================================")
+    print("================================")
+    print("       KAORY WORLD ONLINE")
+    print("================================")
     print()
-    print("Site: http://127.0.0.1:5000")
-    print("Gemini configurado")
-    print("Personalidade da Kaory carregada")
-    print("Galeria, clipes e minigame disponíveis")
-    print("Música e favicon configurados")
+    print("http://127.0.0.1:5000")
+    print("Gemini e ranking carregados.")
     print()
 
     app.run(
