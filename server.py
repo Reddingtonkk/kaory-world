@@ -19,23 +19,24 @@ BASE = Path(__file__).resolve().parent
 load_dotenv(BASE / ".env")
 
 API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+MODEL = os.getenv(
+    "GEMINI_MODEL",
+    "gemini-3-flash-preview"
+)
 
 if not API_KEY:
     raise RuntimeError(
-        "Configure GEMINI_API_KEY no arquivo .env"
+        "Configure GEMINI_API_KEY nas variáveis de ambiente."
     )
 
-
-# ==========================================
-# PERSONALIDADE DA KAORY
-# ==========================================
 
 def carregar_personalidade():
     caminho = BASE / "bot.py"
 
     if not caminho.exists():
-        raise RuntimeError("Arquivo bot.py não encontrado.")
+        raise RuntimeError(
+            "Arquivo bot.py não encontrado."
+        )
 
     codigo = caminho.read_text(encoding="utf-8")
     arvore = ast.parse(codigo)
@@ -74,41 +75,32 @@ def carregar_personalidade():
 PERSONALIDADE = carregar_personalidade()
 
 INSTRUCOES_SITE = """
-Você está conversando com visitantes do site Kaory World,
-e não dentro do Discord.
+Você está conversando com visitantes do Kaory World.
 
-Mantenha integralmente a personalidade e a lore oficial
-da Kaory Saito.
+Mantenha a personalidade e a lore oficial da Kaory Saito.
 
 Não use códigos de emojis exclusivos do Discord.
 
 Responda de maneira natural, divertida e coerente
 com a personalidade original da Kaory.
 
-Prefira respostas concisas e adequadas a uma janela
-de chat. Desenvolva mais quando o visitante pedir.
+Prefira respostas concisas, mas desenvolva quando
+o visitante pedir explicações mais longas.
 
 Não invente acontecimentos oficiais ou dados pessoais.
 """
-
-
-# ==========================================
-# GEMINI E FLASK
-# ==========================================
 
 client = genai.Client(api_key=API_KEY)
 
 app = Flask(__name__, static_folder=None)
 
-historicos = defaultdict(lambda: deque(maxlen=16))
-ultimos_pedidos = {}
+historicos = defaultdict(
+    lambda: deque(maxlen=16)
+)
 
+ultimos_pedidos = {}
 controle = Lock()
 
-
-# ==========================================
-# ROTAS DO SITE
-# ==========================================
 
 @app.get("/")
 def inicio():
@@ -145,20 +137,20 @@ def musica():
     return send_from_directory(BASE, "Kaory-musica.js")
 
 
-# Nova tela de entrada
 @app.get("/Kaory-entrada.js")
 def entrada():
     return send_from_directory(BASE, "Kaory-entrada.js")
+
+
+@app.get("/Kaory-diversao.js")
+def diversao():
+    return send_from_directory(BASE, "Kaory-diversao.js")
 
 
 @app.get("/assets/<path:nome>")
 def assets(nome):
     return send_from_directory(BASE / "assets", nome)
 
-
-# ==========================================
-# CHAT COM GEMINI
-# ==========================================
 
 @app.post("/api/chat")
 def conversar():
@@ -232,15 +224,17 @@ def conversar():
             contents=conteudos,
             config=types.GenerateContentConfig(
                 system_instruction=(
-                    PERSONALIDADE
-                    + "\n\n"
-                    + INSTRUCOES_SITE
+                    PERSONALIDADE +
+                    "\n\n" +
+                    INSTRUCOES_SITE
                 ),
-                max_output_tokens=600
+                max_output_tokens=1200
             )
         )
 
-        resposta = (resultado.text or "").strip()
+        resposta = (
+            resultado.text or ""
+        ).strip()
 
         if not resposta:
             resposta = (
@@ -248,10 +242,15 @@ def conversar():
             )
 
     except Exception:
-        app.logger.exception("Falha ao consultar Gemini")
+        app.logger.exception(
+            "Falha ao consultar Gemini"
+        )
 
         return jsonify(
-            erro="Minha magia deu uma travadinha. Tenta novamente!"
+            erro=(
+                "Minha magia deu uma travadinha. "
+                "Tenta novamente!"
+            )
         ), 502
 
     with controle:
@@ -280,10 +279,6 @@ def conversar():
     return retorno
 
 
-# ==========================================
-# INICIALIZAÇÃO
-# ==========================================
-
 if __name__ == "__main__":
     print()
     print("======================================")
@@ -293,11 +288,8 @@ if __name__ == "__main__":
     print("Site: http://127.0.0.1:5000")
     print("Gemini configurado")
     print("Personalidade da Kaory carregada")
-    print("Chuva de kiwis disponível")
-    print("Memes configurados")
-    print("Cartinha secreta disponível")
-    print("Música ambiente disponível")
-    print("Tela de entrada disponível")
+    print("Galeria, clipes e minigame disponíveis")
+    print("Música e favicon configurados")
     print()
 
     app.run(

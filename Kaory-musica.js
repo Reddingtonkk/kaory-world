@@ -2,22 +2,31 @@
 (() => {
     "use strict";
 
-    const MUSIC_URL = "/assets/Sounds/shopping-with-mom.mp3";
+    const MUSIC_URL =
+        "/assets/Sounds/shopping-with-mom.mp3";
+
     const DEFAULT_VOLUME = 0.15;
 
     const music = new Audio(MUSIC_URL);
+
     music.loop = true;
     music.preload = "auto";
 
-    let enabled = localStorage.getItem("kaoryMusicEnabled") !== "false";
+    let enabled =
+        localStorage.getItem("kaoryMusicEnabled") !== "false";
 
-    const savedVolume = localStorage.getItem("kaoryMusicVolume");
+    const savedVolume =
+        localStorage.getItem("kaoryMusicVolume");
 
     let volume = savedVolume === null
         ? DEFAULT_VOLUME
         : Number(savedVolume);
 
-    if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
+    if (
+        !Number.isFinite(volume) ||
+        volume < 0 ||
+        volume > 1
+    ) {
         volume = DEFAULT_VOLUME;
     }
 
@@ -45,6 +54,15 @@
             backdrop-filter: blur(14px);
             color: #f4e8ff;
             font-family: inherit;
+            transition:
+                right .3s ease,
+                left .3s ease,
+                bottom .3s ease,
+                transform .25s ease;
+        }
+
+        #kaoryMusicControl:hover {
+            transform: translateY(-3px);
         }
 
         #kaoryMusicButton {
@@ -66,6 +84,7 @@
 
         .kaory-music-info strong {
             font-size: 11px;
+            font-weight: 600;
         }
 
         .kaory-music-info small {
@@ -79,10 +98,17 @@
             cursor: pointer;
         }
 
+        body.kaory-chat-open #kaoryMusicControl {
+            right: auto;
+            left: 22px;
+            bottom: 16px;
+        }
+
         @media (max-width: 600px) {
             #kaoryMusicControl {
                 right: 12px;
                 bottom: 82px;
+                gap: 7px;
                 padding: 8px;
             }
 
@@ -93,12 +119,19 @@
             #kaoryMusicVolume {
                 width: 55px;
             }
+
+            body.kaory-chat-open #kaoryMusicControl {
+                right: auto;
+                left: 12px;
+                bottom: 12px;
+            }
         }
     `;
 
     document.head.appendChild(style);
 
     const control = document.createElement("div");
+
     control.id = "kaoryMusicControl";
 
     control.innerHTML = `
@@ -125,14 +158,20 @@
 
     document.body.appendChild(control);
 
-    const button = control.querySelector("#kaoryMusicButton");
-    const slider = control.querySelector("#kaoryMusicVolume");
+    const button =
+        control.querySelector("#kaoryMusicButton");
+
+    const slider =
+        control.querySelector("#kaoryMusicVolume");
 
     slider.value = Math.round(volume * 100);
 
     function targetVolume() {
         if (!enabled) return 0;
-        return ducked ? volume * 0.12 : volume;
+
+        return ducked
+            ? volume * 0.12
+            : volume;
     }
 
     function fadeTo(target, duration = 1200) {
@@ -156,7 +195,8 @@
                 0,
                 Math.min(
                     1,
-                    initial + (target - initial) * smooth
+                    initial +
+                    (target - initial) * smooth
                 )
             );
 
@@ -192,11 +232,14 @@
             }
 
             fadeTo(targetVolume(), 1800);
-
-            console.log("Shopping with Mom tocando! 💜🥝");
             return true;
+
         } catch (error) {
-            console.warn("Não foi possível iniciar a música:", error);
+            console.warn(
+                "Não foi possível iniciar a música:",
+                error
+            );
+
             return false;
         }
     }
@@ -226,31 +269,42 @@
             String(volume)
         );
 
-        if (enabled && !music.paused) {
-            fadeTo(targetVolume(), 150);
+        if (enabled) {
+            if (music.paused) {
+                startMusic();
+            } else {
+                fadeTo(targetVolume(), 150);
+            }
         }
     });
 
-    document.addEventListener("kaory:meme-start", () => {
-        ducked = true;
+    document.addEventListener(
+        "kaory:meme-start",
+        () => {
+            ducked = true;
 
-        if (enabled && !music.paused) {
-            fadeTo(targetVolume(), 220);
+            if (enabled && !music.paused) {
+                fadeTo(targetVolume(), 220);
+            }
         }
-    });
+    );
 
-    document.addEventListener("kaory:meme-end", () => {
-        ducked = false;
+    document.addEventListener(
+        "kaory:meme-end",
+        () => {
+            ducked = false;
 
-        if (enabled && !music.paused) {
-            fadeTo(targetVolume(), 900);
+            if (enabled && !music.paused) {
+                fadeTo(targetVolume(), 900);
+            }
         }
-    });
+    );
 
-    // Disponibiliza a função para a tela de entrada.
     window.KaoryMusic = {
         start: startMusic,
+
         isEnabled: () => enabled,
+
         setEnabled: value => {
             enabled = Boolean(value);
 
@@ -267,7 +321,29 @@
         }
     };
 
+    const chatWindow =
+        document.querySelector("#chatWindow");
+
+    if (chatWindow) {
+        const syncPosition = () => {
+            document.body.classList.toggle(
+                "kaory-chat-open",
+                chatWindow.classList.contains("open")
+            );
+        };
+
+        const observer =
+            new MutationObserver(syncPosition);
+
+        observer.observe(chatWindow, {
+            attributes: true,
+            attributeFilter: ["class"]
+        });
+
+        syncPosition();
+    }
+
     updateButton();
 
-    console.log("Kaory World Music pronta! 💜");
+    console.log("Kaory Music carregada! 💜🥝");
 })();

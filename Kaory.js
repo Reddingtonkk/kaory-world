@@ -1,10 +1,10 @@
 
 "use strict";
 
-const $ = (selector) => document.querySelector(selector);
+const $ = selector => document.querySelector(selector);
 
 const CONFIG = {
-  twitch: "https://www.twitch.tv/kaory_saito",
+    twitch: "https://www.twitch.tv/kaory_saito",
     youtube: "https://www.youtube.com/@KaorySaito-r4h",
     discord: "https://discord.gg/vkCmjt7cBy",
     clips: "https://www.twitch.tv/kaory_saito/clips?range=30d",
@@ -18,377 +18,637 @@ let isTyping = false;
 let skipRequested = false;
 let mouthTimer = null;
 let typingToken = 0;
+let aguardandoResposta = false;
 
 const heroCharacter = $("#heroCharacter");
 const fabCharacter = $("#chatFab img");
+const chatMessages = $("#chatMessages");
+const chatInput = $("#chatInput");
+const chatStatus = $("#chatStatus");
+const chatForm = $("#chatForm");
+const sendButton = chatForm.querySelector('button[type="submit"]');
+
+// Pré-carrega as duas imagens da Kaory.
+const avatarFechado = new Image();
+avatarFechado.src = CONFIG.avatarClosed;
+
+const avatarAberto = new Image();
+avatarAberto.src = CONFIG.avatarOpen;
+
+avatarAberto.addEventListener("error", () => {
+    console.error(
+        "Imagem da boca aberta não encontrada:",
+        CONFIG.avatarOpen
+    );
+});
+
+// ========================================
+// ANIMAÇÃO DA BOCA
+// ========================================
 
 function setMouth(open) {
-  const src = open ? CONFIG.avatarOpen : CONFIG.avatarClosed;
-  heroCharacter.src = src;
-  fabCharacter.src = src;
-}
+    const src = open
+        ? CONFIG.avatarOpen
+        : CONFIG.avatarClosed;
 
-function playBeep() {
-  if (!soundEnabled) return;
+    if (heroCharacter && !heroCharacter.src.endsWith(src)) {
+        heroCharacter.src = src;
+    }
 
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-
-    if (!audioContext) audioContext = new AudioCtx();
-    if (audioContext.state === "suspended") audioContext.resume();
-
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    const now = audioContext.currentTime;
-
-    oscillator.type = "square";
-    oscillator.frequency.setValueAtTime(520 + Math.random() * 90, now);
-
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.018, now + 0.004);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
-
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-
-    oscillator.start(now);
-    oscillator.stop(now + 0.04);
-  } catch (error) {
-    console.warn("Áudio indisponível:", error);
-  }
+    if (fabCharacter && !fabCharacter.src.endsWith(src)) {
+        fabCharacter.src = src;
+    }
 }
 
 function animateMouth() {
-  clearInterval(mouthTimer);
-  let open = false;
+    stopMouth();
 
-  mouthTimer = setInterval(() => {
-    open = !open;
-    setMouth(open);
-  }, 130);
+    let open = false;
+
+    mouthTimer = setInterval(() => {
+        open = !open;
+        setMouth(open);
+    }, 135);
 }
 
 function stopMouth() {
-  clearInterval(mouthTimer);
-  mouthTimer = null;
-  setMouth(false);
+    if (mouthTimer !== null) {
+        clearInterval(mouthTimer);
+        mouthTimer = null;
+    }
+
+    setMouth(false);
+}
+
+// ========================================
+// SOM DE FALA ESTILO POKÉMON
+// ========================================
+
+function playBeep() {
+    if (!soundEnabled) return;
+
+    try {
+        const AudioCtx =
+            window.AudioContext ||
+            window.webkitAudioContext;
+
+        if (!AudioCtx) return;
+
+        if (!audioContext) {
+            audioContext = new AudioCtx();
+        }
+
+        if (audioContext.state === "suspended") {
+            audioContext.resume().catch(() => {});
+        }
+
+        if (audioContext.state !== "running") {
+            return;
+        }
+
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        const now = audioContext.currentTime;
+
+        oscillator.type = "square";
+
+        oscillator.frequency.setValueAtTime(
+            520 + Math.random() * 90,
+            now
+        );
+
+        gain.gain.setValueAtTime(0.0001, now);
+
+        gain.gain.exponentialRampToValueAtTime(
+            0.018,
+            now + 0.004
+        );
+
+        gain.gain.exponentialRampToValueAtTime(
+            0.0001,
+            now + 0.035
+        );
+
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+
+        oscillator.start(now);
+        oscillator.stop(now + 0.04);
+
+    } catch (error) {
+        console.warn("Áudio da Kaory indisponível:", error);
+    }
 }
 
 function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-const chatMessages = $("#chatMessages");
+// ========================================
+// MENSAGENS DO CHAT
+// ========================================
 
 function createMessage(sender) {
-  const element = document.createElement("div");
-  element.className = `message ${sender}`;
+    const element = document.createElement("div");
+    element.className = `message ${sender}`;
 
-  if (sender === "kaory") {
-    const name = document.createElement("span");
-    name.className = "message-name";
-    name.textContent = "KAORY 🥝";
-    element.appendChild(name);
-  }
-
-  const content = document.createElement("span");
-  element.appendChild(content);
-  chatMessages.appendChild(element);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-
-  return content;
-}
-
-async function typeMessage(text) {
-  const token = ++typingToken;
-  const content = createMessage("kaory");
-  const characters = Array.from(text);
-
-  isTyping = true;
-  skipRequested = false;
-  animateMouth();
-
-  for (let i = 0; i < characters.length; i++) {
-    if (token !== typingToken) return;
-
-    if (skipRequested) {
-      content.textContent = text;
-      break;
+    if (sender === "kaory") {
+        const name = document.createElement("span");
+        name.className = "message-name";
+        name.textContent = "KAORY 🥝";
+        element.appendChild(name);
     }
 
-    content.textContent += characters[i];
+    const content = document.createElement("span");
+    element.appendChild(content);
 
-    if (i % 3 === 0 && characters[i].trim()) {
-      playBeep();
-    }
-
+    chatMessages.appendChild(element);
     chatMessages.scrollTop = chatMessages.scrollHeight;
-    await delay(/[.!?]/.test(characters[i]) ? 170 : 29);
-  }
 
-  if (token === typingToken) {
-    isTyping = false;
-    stopMouth();
-  }
+    return content;
 }
 
 function addUserMessage(text) {
-  createMessage("user").textContent = text;
-  chatMessages.scrollTop = chatMessages.scrollHeight;
+    createMessage("user").textContent = text;
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-const demoResponses = [
-  "OIEEE, KIWI!! 🥝💜 Que bom te ver por aqui!",
-  "Hmmm... isso parece suspeito. Mas eu gostei! KKKKK",
-  "Você sabia que os kiwis são parte importantíssima desse mundinho? 💜",
-  "Eu sou a Kaory Saito! Prazer em te conhecer, kiwi!",
-  "Se encontrar um kiwi perdido por aí, cuida bem dele, tá? 🥝"
-];
-
-function demoReply(message) {
-  const normalized = message.toLowerCase();
-
-  if (normalized.includes("oi") || normalized.includes("olá")) {
-    return demoResponses[0];
-  }
-
-  if (normalized.includes("kiwi")) {
-    return demoResponses[2];
-  }
-
-  if (normalized.includes("quem é") || normalized.includes("seu nome")) {
-    return demoResponses[3];
-  }
-
-  return demoResponses[Math.floor(Math.random() * demoResponses.length)];
+function updateChatStatus(text) {
+    if (chatStatus) {
+        chatStatus.textContent = text;
+    }
 }
+
+function setSending(sending) {
+    aguardandoResposta = sending;
+
+    if (sendButton) {
+        sendButton.disabled = sending;
+        sendButton.style.opacity = sending ? ".5" : "1";
+        sendButton.style.cursor = sending
+            ? "wait"
+            : "pointer";
+    }
+}
+
+// ========================================
+// DIGITAÇÃO ANIMADA
+// ========================================
+
+async function typeMessage(text) {
+    const token = ++typingToken;
+    const content = createMessage("kaory");
+    const characters = Array.from(String(text ?? ""));
+
+    isTyping = true;
+    skipRequested = false;
+
+    animateMouth();
+
+    const longText = characters.length > 500;
+    const interval = longText ? 12 : 22;
+    const chunkSize = longText ? 5 : 2;
+
+    let index = 0;
+
+    try {
+        while (index < characters.length) {
+            if (token !== typingToken) {
+                return;
+            }
+
+            if (skipRequested) {
+                content.textContent = characters.join("");
+                break;
+            }
+
+            const chunk = characters
+                .slice(index, index + chunkSize)
+                .join("");
+
+            content.textContent += chunk;
+            index += chunkSize;
+
+            if (index % 12 < chunkSize && chunk.trim()) {
+                playBeep();
+            }
+
+            chatMessages.scrollTop =
+                chatMessages.scrollHeight;
+
+            await delay(interval);
+        }
+    } finally {
+        if (token === typingToken) {
+            isTyping = false;
+            stopMouth();
+        }
+    }
+}
+
+// ========================================
+// GEMINI
+// ========================================
+
+async function perguntarKaory(mensagem) {
+    const controller = new AbortController();
+
+    // Evita que uma requisição fique presa para sempre.
+    const timeout = setTimeout(() => {
+        controller.abort();
+    }, 60000);
+
+    try {
+        const respostaHTTP = await fetch("/api/chat", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ mensagem }),
+            signal: controller.signal
+        });
+
+        const dados = await respostaHTTP.json();
+
+        if (!respostaHTTP.ok) {
+            throw new Error(
+                dados.erro ||
+                "Não consegui conversar com a Kaory."
+            );
+        }
+
+        if (typeof dados.resposta !== "string") {
+            throw new Error("Resposta inválida do servidor.");
+        }
+
+        return dados.resposta;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+// ========================================
+// ABRIR E FECHAR CHAT
+// ========================================
 
 function openChat() {
-  $("#chatWindow").classList.add("open");
-  $("#chatWindow").setAttribute("aria-hidden", "false");
+    const windowChat = $("#chatWindow");
 
-  if (!chatMessages.children.length) {
-    typeMessage("OIEEE!! 💜🥝 Bem-vindo ao meu mundinho! Quer conversar comigo?");
-  }
+    windowChat.classList.add("open");
+    windowChat.setAttribute("aria-hidden", "false");
 
-  $("#chatInput").focus();
+    if (!chatMessages.children.length) {
+        typeMessage(
+            "OIEEE!! 💜🥝 Bem-vindo ao meu mundinho! " +
+            "Quer conversar comigo?"
+        );
+    }
+
+    chatInput.focus();
 }
 
 function closeChat() {
-  $("#chatWindow").classList.remove("open");
-  $("#chatWindow").setAttribute("aria-hidden", "true");
-  skipRequested = true;
+    const windowChat = $("#chatWindow");
+
+    windowChat.classList.remove("open");
+    windowChat.setAttribute("aria-hidden", "true");
+
+    skipRequested = true;
 }
 
 $("#chatFab").addEventListener("click", () => {
-  if ($("#chatWindow").classList.contains("open")) {
-    closeChat();
-  } else {
-    openChat();
-  }
+    if ($("#chatWindow").classList.contains("open")) {
+        closeChat();
+    } else {
+        openChat();
+    }
 });
 
 $("#heroKaory").addEventListener("click", () => {
-  popKiwis(window.innerWidth / 2, window.innerHeight / 2, 8);
-  openChat();
+    popKiwis(
+        window.innerWidth / 2,
+        window.innerHeight / 2,
+        8
+    );
+
+    openChat();
 });
 
 $("#closeChat").addEventListener("click", closeChat);
 
 $("#skipText").addEventListener("click", () => {
-  skipRequested = true;
+    skipRequested = true;
 });
 
+// ========================================
+// ENVIAR MENSAGEM
+// ========================================
 
-$("#chatForm").addEventListener("submit", async (event) => {
+chatForm.addEventListener("submit", async event => {
     event.preventDefault();
 
-    const input = $("#chatInput");
-    const message = input.value.trim();
+    const message = chatInput.value.trim();
 
-    if (!message || isTyping) return;
+    if (!message || aguardandoResposta) return;
 
-    input.value = "";
+    if (isTyping) {
+        skipRequested = true;
+
+        // Aguarda o efeito anterior terminar.
+        await delay(40);
+    }
+
+    chatInput.value = "";
     addUserMessage(message);
+
+    setSending(true);
+    updateChatStatus("Kaory está pensando... 🥝");
 
     try {
         const resposta = await perguntarKaory(message);
-        await typeMessage(resposta);
-    } catch (erro) {
-        console.error("Erro no chat:", erro);
 
-        await typeMessage(
-            "Opa! Minha magia deu uma travadinha. Tenta de novo, kiwi! 🥝"
+        updateChatStatus("Kaory está respondendo... 💜");
+
+        await typeMessage(resposta);
+
+    } catch (error) {
+        console.error("Erro no chat da Kaory:", error);
+
+        updateChatStatus("Conexão indisponível");
+
+        let mensagemErro =
+            "Opa, kiwi! Minha magia deu uma travadinha. " +
+            "Tenta novamente daqui a pouco! 🥝💜";
+
+        if (error.name === "AbortError") {
+            mensagemErro =
+                "A magia demorou demais dessa vez! " +
+                "Tenta novamente, kiwi! 💜";
+        } else if (error.message) {
+            // Exibe o erro informado pelo nosso servidor.
+            mensagemErro = error.message;
+        }
+
+        await typeMessage(mensagemErro);
+
+    } finally {
+        setSending(false);
+
+        updateChatStatus(
+            "Assistente virtual da Kaory 💜"
         );
+
+        if ($("#chatWindow").classList.contains("open")) {
+            chatInput.focus();
+        }
     }
 });
 
+// ========================================
+// CONTROLE DOS SONS DE FALA
+// ========================================
 
 $("#soundToggle").addEventListener("click", () => {
-  soundEnabled = !soundEnabled;
-  $("#soundToggle").textContent = soundEnabled ? "♫" : "♪̸";
-  $("#soundToggle").setAttribute(
-    "aria-label",
-    soundEnabled ? "Desativar sons" : "Ativar sons"
-  );
+    soundEnabled = !soundEnabled;
+
+    $("#soundToggle").textContent = soundEnabled
+        ? "♫"
+        : "♪̸";
+
+    $("#soundToggle").setAttribute(
+        "aria-label",
+        soundEnabled
+            ? "Desativar sons"
+            : "Ativar sons"
+    );
 });
 
+// ========================================
+// MENU MOBILE
+// ========================================
+
 $("#menuToggle").addEventListener("click", () => {
-  const nav = $("#navigation");
-  nav.classList.toggle("open");
-  $("#menuToggle").setAttribute(
-    "aria-label",
-    nav.classList.contains("open") ? "Fechar menu" : "Abrir menu"
-  );
+    const nav = $("#navigation");
+
+    nav.classList.toggle("open");
+
+    $("#menuToggle").setAttribute(
+        "aria-label",
+        nav.classList.contains("open")
+            ? "Fechar menu"
+            : "Abrir menu"
+    );
 });
 
 document.querySelectorAll(".nav a").forEach(link => {
-  link.addEventListener("click", () => {
-    $("#navigation").classList.remove("open");
-  });
+    link.addEventListener("click", () => {
+        $("#navigation").classList.remove("open");
+    });
 });
 
+// ========================================
+// PAINÉIS DO SITE
+// ========================================
+
 const panels = {
-  lore: {
-    title: "O clã Saito 🦊",
-    html: `
-      <p>Kaory Saito é uma das últimas integrantes de um clã extinto.</p>
-      <p>Após uma longa guerra entre clãs, apenas ela e sua mãe sobreviveram.</p>
-      <p>Suas habilidades incluem metamorfose, persuasão, feitiçaria e ilusão.</p>
-      <p>Seu universo guarda muitas histórias que ainda vamos descobrir.</p>
-    `
-  },
-  emotes: {
-    title: "Emotes da Kaory 💜",
-    html: `
-      <p>Um espaço reservado para os emotes oficiais da Kaory.</p>
-      <p>Em breve vamos colocar aqui uma galeria interativa com os arquivos originais.</p>
-      <p>🥝 💜 🦊 ✨</p>
-    `
-  },
-  clips: {
-    title: "Momentos inesquecíveis 🎬",
-    html: `
-      <p>Um cantinho especial para os melhores clipes das lives.</p>
-      <p>Sustos, gritos, risadas e aqueles momentos que só a Kaory consegue proporcionar.</p>
-      <p>A galeria de vídeos será adicionada nas próximas etapas.</p>
-    `
-  }
+    lore: {
+        title: "O clã Saito 🦊",
+        html: `
+            <p>
+                Kaory Saito é uma das últimas integrantes
+                de um clã extinto.
+            </p>
+            <p>
+                Após uma longa guerra entre clãs,
+                apenas ela e sua mãe sobreviveram.
+            </p>
+            <p>
+                Suas habilidades incluem metamorfose,
+                persuasão, feitiçaria e ilusão.
+            </p>
+            <p>
+                Seu universo guarda muitas histórias
+                que ainda vamos descobrir.
+            </p>
+        `
+    },
+
+    emotes: {
+        title: "Emotes da Kaory 💜",
+        html: `
+            <p>
+                Um espaço reservado para os emotes
+                oficiais da Kaory.
+            </p>
+            <p>
+                Em breve vamos colocar aqui uma galeria
+                interativa com os arquivos originais.
+            </p>
+            <p>🥝 💜 🦊 ✨</p>
+        `
+    },
+
+    clips: {
+        title: "Momentos inesquecíveis 🎬",
+        html: `
+            <p>
+                Um cantinho especial para os melhores
+                clipes das lives.
+            </p>
+            <p>
+                Sustos, gritos, risadas e aqueles momentos
+                que só a Kaory consegue proporcionar.
+            </p>
+            <p>
+                A galeria de vídeos será adicionada
+                nas próximas etapas.
+            </p>
+        `
+    }
 };
 
 function openPanel(name) {
-  const panel = panels[name];
-  if (!panel) return;
+    const panel = panels[name];
 
-  $("#modalTitle").textContent = panel.title;
-  $("#modalContent").innerHTML = panel.html;
-  $("#modalBackdrop").classList.add("open");
-  $("#modalBackdrop").setAttribute("aria-hidden", "false");
+    if (!panel) return;
+
+    $("#modalTitle").textContent = panel.title;
+    $("#modalContent").innerHTML = panel.html;
+
+    $("#modalBackdrop").classList.add("open");
+
+    $("#modalBackdrop").setAttribute(
+        "aria-hidden",
+        "false"
+    );
 }
 
 function closePanel() {
-  $("#modalBackdrop").classList.remove("open");
-  $("#modalBackdrop").setAttribute("aria-hidden", "true");
+    $("#modalBackdrop").classList.remove("open");
+
+    $("#modalBackdrop").setAttribute(
+        "aria-hidden",
+        "true"
+    );
 }
 
 document.querySelectorAll("[data-panel]").forEach(button => {
-  button.addEventListener("click", () => {
-    openPanel(button.dataset.panel);
-  });
+    button.addEventListener("click", () => {
+        openPanel(button.dataset.panel);
+    });
 });
 
 $("#modalClose").addEventListener("click", closePanel);
 
 $("#modalBackdrop").addEventListener("click", event => {
-  if (event.target === $("#modalBackdrop")) closePanel();
+    if (event.target === $("#modalBackdrop")) {
+        closePanel();
+    }
 });
 
 document.addEventListener("keydown", event => {
-  if (event.key === "Escape") {
-    closePanel();
-    closeChat();
-  }
+    if (event.key === "Escape") {
+        closePanel();
+        closeChat();
+    }
 });
+
+// ========================================
+// LINKS OFICIAIS
+// ========================================
 
 document.querySelectorAll("[data-link]").forEach(link => {
-  const type = link.dataset.link;
-  if (CONFIG[type]) link.href = CONFIG[type];
-});
+    const type = link.dataset.link;
 
-$("#discordLink").addEventListener("click", event => {
-  if (!CONFIG.discord) {
-    event.preventDefault();
-    openPanel("lore");
-    $("#modalTitle").textContent = "Comunidade 💜";
-    $("#modalContent").textContent =
-      "O convite do Discord ainda será adicionado ao site.";
-  }
+    if (CONFIG[type]) {
+        link.href = CONFIG[type];
+    }
 });
 
 if (CONFIG.discord) {
-  $("#discordLink").href = CONFIG.discord;
-  $("#discordLink").target = "_blank";
-  $("#discordLink").rel = "noopener noreferrer";
-  $("#discordHint").textContent = "Te esperamos por lá! 💜";
+    const discordLink = $("#discordLink");
+
+    discordLink.href = CONFIG.discord;
+    discordLink.target = "_blank";
+    discordLink.rel = "noopener noreferrer";
+
+    $("#discordHint").textContent =
+        "Te esperamos por lá! 💜";
 }
 
+// ========================================
+// PARTÍCULAS DE KIWIS
+// ========================================
+
 function popKiwis(x, y, amount = 5) {
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (
+        window.matchMedia(
+            "(prefers-reduced-motion: reduce)"
+        ).matches
+    ) {
+        return;
+    }
 
-  for (let i = 0; i < amount; i++) {
-    const kiwi = document.createElement("span");
-    kiwi.className = "kiwi-pop";
-    kiwi.textContent = i % 3 === 0 ? "💜" : "🥝";
+    const layer = $("#kiwiLayer");
 
-    kiwi.style.left = `${x + (Math.random() - .5) * 90}px`;
-    kiwi.style.top = `${y + (Math.random() - .5) * 45}px`;
-    kiwi.style.setProperty("--dx", `${(Math.random() - .5) * 150}px`);
+    for (let i = 0; i < amount; i++) {
+        const kiwi = document.createElement("span");
 
-    $("#kiwiLayer").appendChild(kiwi);
-    setTimeout(() => kiwi.remove(), 1100);
-  }
+        kiwi.className = "kiwi-pop";
+        kiwi.textContent = i % 3 === 0 ? "💜" : "🥝";
+
+        kiwi.style.left = `${
+            x + (Math.random() - 0.5) * 90
+        }px`;
+
+        kiwi.style.top = `${
+            y + (Math.random() - 0.5) * 45
+        }px`;
+
+        kiwi.style.setProperty(
+            "--dx",
+            `${(Math.random() - 0.5) * 150}px`
+        );
+
+        layer.appendChild(kiwi);
+
+        setTimeout(() => kiwi.remove(), 1100);
+    }
 }
 
 $("#heroKaory").addEventListener("mouseenter", () => {
-  $("#heroBubble").textContent = "OIEEE, KIWI!! 💜";
+    $("#heroBubble").textContent = "OIEEE, KIWI!! 💜";
 });
 
 $("#heroKaory").addEventListener("mouseleave", () => {
-  $("#heroBubble").textContent = "Oieee! Clica em mim! 🥝";
+    $("#heroBubble").textContent =
+        "Oieee! Clica em mim! 🥝";
 });
 
-const observer = new IntersectionObserver(entries => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      entry.target.classList.add("visible");
-      observer.unobserve(entry.target);
-    }
-  });
-}, { threshold: 0.08 });
+// ========================================
+// ANIMAÇÕES DE ENTRADA
+// ========================================
 
-document.querySelectorAll(".reveal").forEach(element => {
-  observer.observe(element);
-});
+if ("IntersectionObserver" in window) {
+    const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add("visible");
+                observer.unobserve(entry.target);
+            }
+        });
+    }, {
+        threshold: 0.08
+    });
+
+    document.querySelectorAll(".reveal").forEach(element => {
+        observer.observe(element);
+    });
+} else {
+    document.querySelectorAll(".reveal").forEach(element => {
+        element.classList.add("visible");
+    });
+}
 
 console.log("🥝 Kaory World carregado com sucesso!");
-
-async function perguntarKaory(mensagem) {
-  const respostaHTTP = await fetch("/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ mensagem })
-  });
-
-  const dados = await respostaHTTP.json();
-
-  if (!respostaHTTP.ok) {
-    throw new Error(
-      dados.erro || "Não consegui conversar com a Kaory."
-    );
-  }
-
-  return dados.resposta;
-}
+console.log("💜 Chat Gemini e animação da boca preparados!");
