@@ -4,197 +4,172 @@
 
     const $ = selector => document.querySelector(selector);
 
-    const fotos = [
-        // { src: "/assets/Galeria/kaory-01.png", nome: "Kaory 💜" }
-    ];
-
-    const clipes = [
-        // { titulo: "Clipe da Kaory", url: "https://www.twitch.tv/kaory_saito/clip/..." }
-    ];
-
-    const TWITCH = "https://www.twitch.tv/kaory_saito/clips?range=30d";
+    const TWITCH_CLIPS =
+        "https://www.twitch.tv/kaory_saito/clips?range=30d";
 
     const modal = $("#modalBackdrop");
     const modalTitle = $("#modalTitle");
     const modalContent = $("#modalContent");
 
+    if (!modal || !modalTitle || !modalContent) {
+        console.error("Kaory Diversão: modal não encontrado.");
+        return;
+    }
+
     let partida = null;
-    let audioContext = null;
     let sonsAtivos = true;
+    let audioContext = null;
+
+    const fahhh = new Audio(
+        "/assets/Sounds/fahhh_KcgAXfs.mp3"
+    );
+    fahhh.preload = "auto";
 
     const style = document.createElement("style");
     style.textContent = `
-        .kw-btn {
-            border: 1px solid rgba(185,137,220,.45);
-            border-radius: 12px;
+        .kd-btn {
             padding: 11px 16px;
-            background: #79519c;
-            color: #fff;
+            border-radius: 12px;
+            border: 1px solid #9568b3;
+            background: #76519a;
+            color: white;
             font: inherit;
-            font-size: 13px;
-            text-decoration: none;
             cursor: pointer;
-            display: inline-block;
             transition: transform .2s, background .2s;
         }
-        .kw-btn:hover {
+
+        .kd-btn:hover {
             transform: translateY(-2px);
-            background: #9365b7;
+            background: #9568b3;
         }
-        .kw-btn:disabled {
+
+        .kd-btn:disabled {
             opacity: .5;
             cursor: default;
         }
-        .kw-input {
+
+        .kd-input {
             width: 100%;
             box-sizing: border-box;
             padding: 13px;
             margin: 12px 0;
+            border: 1px solid #80599b;
             border-radius: 12px;
-            border: 1px solid #805c9c;
-            background: #1b1226;
-            color: #fff;
+            background: #1c1228;
+            color: white;
             font: inherit;
         }
-        .kw-muted {
-            color: #cdb4df;
+
+        .kd-muted {
+            color: #cdb6dd;
             font-size: 13px;
             line-height: 1.7;
         }
-        .kw-row {
+
+        .kd-row {
             display: flex;
-            align-items: center;
             justify-content: space-between;
+            align-items: center;
             flex-wrap: wrap;
             gap: 10px;
-            margin: 14px 0;
+            margin: 15px 0;
         }
-        .kw-box {
-            border: 1px solid #654781;
-            border-radius: 15px;
-            background: #24172f;
-            padding: 16px;
-            margin: 12px 0;
-        }
-        .kw-arena {
+
+        .kd-arena {
             position: relative;
             height: 300px;
-            border: 1px solid #8255a2;
+            border: 1px solid #80549e;
             border-radius: 18px;
             overflow: hidden;
-            background:
-                radial-gradient(circle at 50% 35%, #493061, #160d23);
+            background: radial-gradient(
+                circle at center,
+                #48305e,
+                #160d23
+            );
             touch-action: manipulation;
         }
-        .kw-target {
+
+        .kd-kiwi {
             position: absolute;
             width: 58px;
             height: 58px;
+            display: grid;
+            place-items: center;
             border: 0;
             border-radius: 50%;
-            background: #65417f;
-            font-size: 32px;
+            background: rgba(167, 115, 202, .25);
+            font-size: 33px;
             cursor: pointer;
-            animation: kw-appear .18s ease both;
+            animation: kd-pop .18s ease both;
         }
-        .kw-target:active {
-            transform: scale(.85);
+
+        .kd-kiwi:hover {
+            background: rgba(167, 115, 202, .45);
         }
-        .kw-ranking {
+
+        .kd-ranking {
             display: grid;
             gap: 8px;
             margin: 12px 0;
         }
-        .kw-rank {
+
+        .kd-rank {
             display: grid;
-            grid-template-columns: 38px 1fr auto;
+            grid-template-columns: 35px 1fr auto;
             gap: 10px;
             align-items: center;
             padding: 12px;
-            border: 1px solid rgba(190,142,220,.12);
             border-radius: 12px;
             background: #30203e;
             color: #f4e9ff;
             font-size: 13px;
         }
-        .kw-rank:first-child {
-            border-color: rgba(255,220,100,.45);
+
+        .kd-rank:first-child {
+            border: 1px solid rgba(255, 220, 100, .5);
         }
-        .kw-gallery {
-            display: grid;
-            grid-template-columns: repeat(2,minmax(0,1fr));
-            gap: 12px;
-            margin-top: 16px;
-        }
-        .kw-photo {
-            border: 1px solid #75518e;
+
+        .kd-clip {
+            padding: 16px;
+            margin: 12px 0;
+            border: 1px solid #684a80;
             border-radius: 14px;
-            overflow: hidden;
             background: #24172f;
-            color: #fff;
-            padding: 0;
-            cursor: pointer;
         }
-        .kw-photo img {
-            display: block;
-            width: 100%;
-            aspect-ratio: 1;
-            object-fit: cover;
-        }
-        .kw-photo span {
-            display: block;
-            padding: 10px;
-        }
-        .kw-lightbox {
-            position: fixed;
-            inset: 0;
-            z-index: 30000;
-            display: grid;
-            place-items: center;
-            background: rgba(5,3,10,.95);
-            padding: 20px;
-            cursor: zoom-out;
-        }
-        .kw-lightbox img {
-            max-width: 95vw;
-            max-height: 85vh;
-            object-fit: contain;
-        }
-        @keyframes kw-appear {
-            from { opacity: 0; transform: scale(.5); }
-            to { opacity: 1; transform: scale(1); }
+
+        @keyframes kd-pop {
+            from {
+                opacity: 0;
+                transform: scale(.5);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
         }
     `;
     document.head.appendChild(style);
 
-    function el(tag, className = "", text = null) {
+    function element(tag, className = "", text = "") {
         const node = document.createElement(tag);
         if (className) node.className = className;
-        if (text !== null) node.textContent = text;
+        node.textContent = text;
         return node;
     }
 
-    function btn(text, callback) {
-        const node = el("button", "kw-btn", text);
+    function button(text, callback) {
+        const node = element("button", "kd-btn", text);
         node.type = "button";
         node.addEventListener("click", callback);
         return node;
     }
 
-    function externalLink(text, url) {
-        const node = el("a", "kw-btn", text);
-        node.href = url;
-        node.target = "_blank";
-        node.rel = "noopener noreferrer";
-        return node;
-    }
-
     function stopGame() {
-        if (!partida) return;
-
-        clearInterval(partida.timer);
-        partida.running = false;
-        partida = null;
+        if (partida) {
+            clearInterval(partida.timer);
+            partida.running = false;
+            partida = null;
+        }
     }
 
     function openModal(title) {
@@ -202,75 +177,13 @@
 
         modalTitle.textContent = title;
         modalContent.replaceChildren();
+
         modal.classList.add("open");
         modal.setAttribute("aria-hidden", "false");
     }
 
-    function playTone(frequency, duration = .09, type = "sine") {
-        if (!sonsAtivos) return;
-
-        try {
-            const Ctx = window.AudioContext || window.webkitAudioContext;
-            if (!Ctx) return;
-
-            if (!audioContext) audioContext = new Ctx();
-
-            if (audioContext.state === "suspended") {
-                audioContext.resume().catch(() => {});
-            }
-
-            const now = audioContext.currentTime;
-            const oscillator = audioContext.createOscillator();
-            const gain = audioContext.createGain();
-
-            oscillator.type = type;
-            oscillator.frequency.setValueAtTime(frequency, now);
-
-            gain.gain.setValueAtTime(.0001, now);
-            gain.gain.exponentialRampToValueAtTime(.035, now + .008);
-            gain.gain.exponentialRampToValueAtTime(
-                .0001,
-                now + duration
-            );
-
-            oscillator.connect(gain);
-            gain.connect(audioContext.destination);
-
-            oscillator.start(now);
-            oscillator.stop(now + duration + .02);
-        } catch (error) {
-            console.warn("Som indisponível:", error);
-        }
-    }
-
-    function startSound() {
-        playTone(560, .1);
-        setTimeout(() => playTone(740, .12), 110);
-    }
-
-    function captureSound(score) {
-        playTone(440 + Math.min(score, 12) * 35, .07);
-
-        if (score % 5 === 0) {
-            setTimeout(() => playTone(880, .13), 80);
-            setTimeout(() => playTone(1100, .15), 170);
-        }
-    }
-
-    function finishSound() {
-        playTone(680, .12);
-        setTimeout(() => playTone(520, .14), 140);
-        setTimeout(() => playTone(390, .22), 290);
-    }
-
-    function recordSound() {
-        playTone(660, .12);
-        setTimeout(() => playTone(880, .14), 130);
-        setTimeout(() => playTone(1100, .2), 270);
-    }
-
-    async function api(path, options = {}) {
-        const response = await fetch(path, {
+    async function api(url, options = {}) {
+        const response = await fetch(url, {
             ...options,
             headers: {
                 "Content-Type": "application/json",
@@ -281,44 +194,141 @@
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.erro || "Erro de conexão.");
+            throw new Error(
+                data.erro || "Erro de comunicação."
+            );
         }
 
         return data;
     }
 
-    async function loadRanking(container) {
+    function tocarFahhh() {
+        if (!sonsAtivos) return;
+
+        const som = fahhh.cloneNode();
+        som.volume = .28;
+        som.playbackRate = .95 + Math.random() * .15;
+
+        som.play().catch(() => {});
+
+        document.dispatchEvent(
+            new Event("kaory:meme-start")
+        );
+
+        const finalizar = () => {
+            document.dispatchEvent(
+                new Event("kaory:meme-end")
+            );
+        };
+
+        som.addEventListener("ended", finalizar, {
+            once: true
+        });
+
+        som.addEventListener("error", finalizar, {
+            once: true
+        });
+    }
+
+    function tone(frequency, duration = .09) {
+        if (!sonsAtivos) return;
+
+        try {
+            const Ctx =
+                window.AudioContext ||
+                window.webkitAudioContext;
+
+            if (!Ctx) return;
+
+            if (!audioContext) {
+                audioContext = new Ctx();
+            }
+
+            if (audioContext.state === "suspended") {
+                audioContext.resume().catch(() => {});
+            }
+
+            const now = audioContext.currentTime;
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+
+            osc.type = "sine";
+            osc.frequency.value = frequency;
+
+            gain.gain.setValueAtTime(.0001, now);
+            gain.gain.exponentialRampToValueAtTime(
+                .035,
+                now + .01
+            );
+            gain.gain.exponentialRampToValueAtTime(
+                .0001,
+                now + duration
+            );
+
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+
+            osc.start(now);
+            osc.stop(now + duration + .02);
+        } catch {}
+    }
+
+    function somInicio() {
+        tone(580, .1);
+        setTimeout(() => tone(780, .12), 120);
+    }
+
+    function somFinal() {
+        tone(700, .12);
+        setTimeout(() => tone(520, .14), 150);
+        setTimeout(() => tone(390, .2), 300);
+    }
+
+    async function carregarRanking(container) {
         container.replaceChildren(
-            el("p", "kw-muted", "Carregando ranking... 🥝")
+            element("p", "kd-muted", "Carregando ranking...")
         );
 
         try {
             const data = await api("/api/jogo/ranking");
+
+            if (!container.isConnected) return;
+
             container.replaceChildren();
 
-            if (!data.ranking.length) {
+            if (!data.ranking?.length) {
                 container.appendChild(
-                    el("p", "kw-muted", "Seja o primeiro kiwi do ranking!")
+                    element(
+                        "p",
+                        "kd-muted",
+                        "Seja o primeiro kiwi no ranking! 🥝"
+                    )
                 );
                 return;
             }
 
-            data.ranking.forEach((player, index) => {
-                const row = el("div", "kw-rank");
-                const position =
-                    ["🥇", "🥈", "🥉"][index] || `#${index + 1}`;
+            data.ranking.forEach((jogador, index) => {
+                const linha = element("div", "kd-rank");
 
-                row.append(
-                    el("span", "", position),
-                    el("strong", "", player.nick),
-                    el("span", "", `${player.pontos} 🥝`)
+                const posicao =
+                    ["🥇", "🥈", "🥉"][index] ||
+                    `#${index + 1}`;
+
+                linha.append(
+                    element("span", "", posicao),
+                    element("strong", "", jogador.nick),
+                    element(
+                        "span",
+                        "",
+                        `${jogador.pontos} 🥝`
+                    )
                 );
 
-                container.appendChild(row);
+                container.appendChild(linha);
             });
         } catch (error) {
             container.replaceChildren(
-                el("p", "kw-muted", error.message)
+                element("p", "kd-muted", error.message)
             );
         }
     }
@@ -326,293 +336,304 @@
     function showGame() {
         openModal("Caça aos Kiwis 🥝");
 
-        const intro = el(
+        const intro = element(
             "p",
-            "kw-muted",
+            "kd-muted",
             "Escolha seu nick e capture o máximo de kiwis em 30 segundos!"
         );
 
-        const nick = el("input", "kw-input");
+        const nick = element("input", "kd-input");
         nick.type = "text";
         nick.maxLength = 24;
         nick.placeholder = "Seu nick no ranking";
-        nick.autocomplete = "nickname";
 
         try {
-            nick.value = localStorage.getItem("kaoryGameNick") || "";
+            nick.value =
+                localStorage.getItem("kaoryGameNick") || "";
         } catch {}
 
-        const stats = el("div", "kw-row");
-        const points = el("strong", "", "🥝 0 pontos");
-        const clock = el("strong", "", "⏱ 30s");
-        stats.append(points, clock);
-
-        const arena = el("div", "kw-arena");
-        const message = el("p", "kw-muted", "Preparado para a caça?");
-
-        const actions = el("div", "kw-row");
-        const startButton = btn("Começar partida", begin);
-
-        const soundButton = btn("🔊 Sons ligados", () => {
-            sonsAtivos = !sonsAtivos;
-            soundButton.textContent = sonsAtivos
-                ? "🔊 Sons ligados"
-                : "🔇 Sons desligados";
-        });
-
-        soundButton.textContent = sonsAtivos
-            ? "🔊 Sons ligados"
-            : "🔇 Sons desligados";
-
-        actions.append(startButton, soundButton);
-
-        const heading = el("h3", "", "🏆 Ranking global — Top 10");
-        const ranking = el("div", "kw-ranking");
-
-        contentAppend(
-            intro, nick, stats, arena, message,
-            actions, heading, ranking
+        const stats = element("div", "kd-row");
+        const points = element(
+            "strong",
+            "",
+            "🥝 0 pontos"
+        );
+        const clock = element(
+            "strong",
+            "",
+            "⏱ 30s"
         );
 
-        loadRanking(ranking);
+        stats.append(points, clock);
 
-        function contentAppend(...nodes) {
-            modalContent.append(...nodes);
-        }
+        const arena = element("div", "kd-arena");
+
+        const message = element(
+            "p",
+            "kd-muted",
+            "Preparado para começar?"
+        );
+
+        const actions = element("div", "kd-row");
+
+        const start = button(
+            "Começar partida",
+            iniciar
+        );
+
+        const sound = button(
+            sonsAtivos
+                ? "🔊 Sons ligados"
+                : "🔇 Sons desligados",
+            () => {
+                sonsAtivos = !sonsAtivos;
+                sound.textContent = sonsAtivos
+                    ? "🔊 Sons ligados"
+                    : "🔇 Sons desligados";
+            }
+        );
+
+        actions.append(start, sound);
+
+        const rankingTitle = element(
+            "h3",
+            "",
+            "🏆 Ranking global — Top 10"
+        );
+
+        const ranking = element(
+            "div",
+            "kd-ranking"
+        );
+
+        modalContent.append(
+            intro,
+            nick,
+            stats,
+            arena,
+            message,
+            actions,
+            rankingTitle,
+            ranking
+        );
+
+        carregarRanking(ranking);
 
         function spawn() {
-            if (!partida || !partida.running) return;
+            if (!partida?.running) return;
 
             arena.replaceChildren();
 
-            const target = el("button", "kw-target", "🥝");
-            target.type = "button";
-            target.setAttribute("aria-label", "Capturar kiwi");
+            const kiwi = element(
+                "button",
+                "kd-kiwi",
+                "🥝"
+            );
 
-            const maxX = Math.max(0, arena.clientWidth - 58);
-            const maxY = Math.max(0, arena.clientHeight - 58);
+            kiwi.type = "button";
+            kiwi.setAttribute(
+                "aria-label",
+                "Capturar kiwi"
+            );
 
-            target.style.left = `${Math.random() * maxX}px`;
-            target.style.top = `${Math.random() * maxY}px`;
+            const maxX = Math.max(
+                0,
+                arena.clientWidth - 58
+            );
 
-            target.addEventListener("click", () => {
-                if (!partida || !partida.running) return;
+            const maxY = Math.max(
+                0,
+                arena.clientHeight - 58
+            );
+
+            kiwi.style.left =
+                `${Math.random() * maxX}px`;
+
+            kiwi.style.top =
+                `${Math.random() * maxY}px`;
+
+            kiwi.addEventListener("click", () => {
+                if (!partida?.running) return;
 
                 partida.score++;
-                points.textContent = `🥝 ${partida.score} pontos`;
 
-                captureSound(partida.score);
+                points.textContent =
+                    `🥝 ${partida.score} pontos`;
+
+                tocarFahhh();
+
+                if (partida.score % 5 === 0) {
+                    tone(950, .12);
+                }
+
                 spawn();
             });
 
-            arena.appendChild(target);
+            arena.appendChild(kiwi);
         }
 
-        async function finish() {
-            if (!partida || !partida.running) return;
+        async function finalizar() {
+            if (!partida?.running) return;
 
-            const finished = partida;
-            finished.running = false;
+            const atual = partida;
 
-            clearInterval(finished.timer);
+            atual.running = false;
+            clearInterval(atual.timer);
+
             arena.replaceChildren();
-            finishSound();
-
-            startButton.disabled = true;
-            nick.disabled = false;
+            somFinal();
 
             message.textContent =
-                `Fim de jogo! ${finished.score} kiwis. Salvando...`;
+                `Fim! ${atual.score} kiwis. Salvando...`;
 
             try {
-                const result = await api("/api/jogo/finalizar", {
-                    method: "POST",
-                    body: JSON.stringify({
-                        token: finished.token,
-                        pontos: finished.score
-                    })
-                });
+                const resultado = await api(
+                    "/api/jogo/finalizar",
+                    {
+                        method: "POST",
+                        body: JSON.stringify({
+                            token: atual.token,
+                            pontos: atual.score
+                        })
+                    }
+                );
 
                 message.textContent =
-                    `Boa, ${finished.nick}! ${finished.score} kiwis! 💜`;
+                    `${atual.nick} conseguiu ${atual.score} kiwis! 💜`;
 
-                if (result.recorde) {
-                    recordSound();
-                    message.textContent += " 🏆 Novo recorde!";
+                if (resultado.recorde) {
+                    message.textContent +=
+                        " 🏆 Novo recorde!";
                 }
 
-                await loadRanking(ranking);
+                await carregarRanking(ranking);
             } catch (error) {
                 message.textContent =
-                    `Você fez ${finished.score} pontos, mas não foi possível salvar: ${error.message}`;
+                    `Pontuação: ${atual.score}. ${error.message}`;
             } finally {
-                startButton.disabled = false;
-                startButton.textContent = "Jogar novamente";
+                nick.disabled = false;
+                start.disabled = false;
+                start.textContent = "Jogar novamente";
             }
         }
 
-        async function begin() {
+        async function iniciar() {
             if (partida?.running) return;
 
-            const playerName = nick.value.trim();
+            const nome = nick.value.trim();
 
-            if (playerName.length < 2 || playerName.length > 24) {
+            if (nome.length < 2 || nome.length > 24) {
                 message.textContent =
-                    "Escolha um nick de 2 a 24 caracteres!";
+                    "Escolha um nick de 2 a 24 caracteres.";
                 return;
             }
 
-            startButton.disabled = true;
+            start.disabled = true;
             message.textContent = "Preparando partida...";
 
             try {
-                const data = await api("/api/jogo/iniciar", {
-                    method: "POST",
-                    body: JSON.stringify({ nick: playerName })
-                });
+                const data = await api(
+                    "/api/jogo/iniciar",
+                    {
+                        method: "POST",
+                        body: JSON.stringify({
+                            nick: nome
+                        })
+                    }
+                );
 
                 try {
-                    localStorage.setItem("kaoryGameNick", playerName);
+                    localStorage.setItem(
+                        "kaoryGameNick",
+                        nome
+                    );
                 } catch {}
 
                 partida = {
-                    nick: playerName,
+                    nick: nome,
                     token: data.token,
                     score: 0,
                     running: true,
                     timer: null
                 };
 
+                const atual = partida;
+                const deadline =
+                    performance.now() + 30000;
+
                 nick.disabled = true;
+
                 points.textContent = "🥝 0 pontos";
                 clock.textContent = "⏱ 30s";
                 message.textContent = "VAI, KIWI! 💜";
 
-                startSound();
+                somInicio();
                 spawn();
 
-                const current = partida;
-                const deadline = performance.now() + 30000;
-
-                current.timer = setInterval(() => {
-                    if (partida !== current || !current.running) {
-                        clearInterval(current.timer);
+                atual.timer = setInterval(() => {
+                    if (
+                        partida !== atual ||
+                        !atual.running
+                    ) {
+                        clearInterval(atual.timer);
                         return;
                     }
 
-                    const remaining = Math.max(
+                    const restante = Math.max(
                         0,
-                        Math.ceil((deadline - performance.now()) / 1000)
+                        Math.ceil(
+                            (deadline - performance.now()) / 1000
+                        )
                     );
 
-                    clock.textContent = `⏱ ${remaining}s`;
+                    clock.textContent =
+                        `⏱ ${restante}s`;
 
-                    if (remaining <= 0) finish();
+                    if (restante <= 0) {
+                        finalizar();
+                    }
                 }, 100);
 
             } catch (error) {
                 message.textContent = error.message;
-                startButton.disabled = false;
+                start.disabled = false;
             }
         }
-    }
-
-    function showGallery() {
-        openModal("Galeria da Kaory 💜");
-
-        modalContent.appendChild(
-            el("p", "kw-muted", "Fotos, artes e momentos especiais da Kaory.")
-        );
-
-        if (!fotos.length) {
-            modalContent.appendChild(
-                el("div", "kw-box", "A galeria está esperando as primeiras fotos! 🦊💜")
-            );
-            return;
-        }
-
-        const grid = el("div", "kw-gallery");
-
-        fotos.forEach(foto => {
-            const card = el("button", "kw-photo");
-            card.type = "button";
-
-            const img = document.createElement("img");
-            img.src = foto.src;
-            img.alt = foto.nome;
-            img.loading = "lazy";
-
-            card.append(img, el("span", "", foto.nome));
-
-            card.addEventListener("click", () => {
-                const overlay = el("div", "kw-lightbox");
-                const enlarged = document.createElement("img");
-
-                enlarged.src = foto.src;
-                enlarged.alt = foto.nome;
-
-                overlay.appendChild(enlarged);
-                document.body.appendChild(overlay);
-
-                overlay.addEventListener("click", () => overlay.remove());
-            });
-
-            grid.appendChild(card);
-        });
-
-        modalContent.appendChild(grid);
     }
 
     function showClips() {
         openModal("Clipes da Kaory 🎬");
 
         modalContent.appendChild(
-            el("p", "kw-muted", "Sustos, risadas e os melhores momentos das lives!")
+            element(
+                "p",
+                "kd-muted",
+                "Os sustos, as risadas e os melhores momentos da Kaory!"
+            )
         );
 
-        if (!clipes.length) {
-            modalContent.appendChild(
-                el("div", "kw-box", "Os clipes selecionados serão adicionados em breve.")
-            );
-        }
+        const card = element("div", "kd-clip");
 
-        clipes.forEach(clip => {
-            const card = el("div", "kw-box");
-
-            card.append(
-                el("strong", "", clip.titulo),
-                document.createElement("br"),
-                externalLink("Assistir clipe ↗", clip.url)
-            );
-
-            modalContent.appendChild(card);
-        });
-
-        modalContent.appendChild(
-            externalLink("Ver todos os clipes na Twitch ↗", TWITCH)
+        card.appendChild(
+            element(
+                "p",
+                "kd-muted",
+                "Confira os clipes da Kaory diretamente na Twitch."
+            )
         );
-    }
 
-    // Captura antes de qualquer painel antigo do Kaory.js.
-    const galleryCard =
-        document.querySelector('[data-panel="gallery"]') ||
-        document.querySelector('[data-panel="emotes"]');
+        const link = element(
+            "a",
+            "kd-btn",
+            "Assistir clipes ↗"
+        );
 
-    const clipsCard =
-        document.querySelector('[data-panel="clips"]');
+        link.href = TWITCH_CLIPS;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
 
-    if (galleryCard) {
-        galleryCard.addEventListener("click", event => {
-            event.stopImmediatePropagation();
-            showGallery();
-        }, true);
-    }
-
-    if (clipsCard) {
-        clipsCard.addEventListener("click", event => {
-            event.stopImmediatePropagation();
-            showClips();
-        }, true);
+        card.appendChild(link);
+        modalContent.appendChild(card);
     }
 
     const gameCard = $("#kiwiGameCard");
@@ -621,15 +642,37 @@
         gameCard.addEventListener("click", showGame);
     }
 
-    $("#modalClose").addEventListener("click", stopGame);
+    const clipsCard =
+        document.querySelector('[data-panel="clips"]');
+
+    if (clipsCard) {
+        clipsCard.addEventListener(
+            "click",
+            event => {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                showClips();
+            },
+            true
+        );
+    }
+
+    $("#modalClose")?.addEventListener(
+        "click",
+        stopGame
+    );
 
     modal.addEventListener("click", event => {
-        if (event.target === modal) stopGame();
+        if (event.target === modal) {
+            stopGame();
+        }
     });
 
     document.addEventListener("keydown", event => {
-        if (event.key === "Escape") stopGame();
+        if (event.key === "Escape") {
+            stopGame();
+        }
     });
 
-    console.log("🥝 Minigame, ranking e sons carregados!");
+    console.log("Kaory Diversão carregado! 🥝");
 })();
