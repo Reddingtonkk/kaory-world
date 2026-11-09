@@ -14,11 +14,15 @@ from flask import (
     Flask,
     jsonify,
     request,
-    send_from_directory
+    send_from_directory,
+    session
 )
 from google import genai
 from google.genai import types
 from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.security import check_password_hash
+from functools import wraps
+import hmac
 
 from ranking import ranking_bp, preparar_banco
 from galeria import galeria_bp, preparar_galeria
@@ -147,7 +151,12 @@ app = Flask(
     static_folder=None
 )
 
+app.secret_key = os.getenv("KAORY_SESSION_SECRET") or secrets.token_hex(32)
+
 app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=bool(os.getenv("RENDER")),
     MAX_CONTENT_LENGTH=MAX_REQUISICAO,
 
     # Limite para campos comuns do formulário,
@@ -273,6 +282,7 @@ def arquivos_site(nome):
         "Kaory-entrada.js",
         "Kaory-diversao.js",
         "Kaory-galeria.js",
+        "Kaory-admin.js",
     }
 
     if nome not in permitidos:
@@ -292,6 +302,88 @@ def assets(nome):
         BASE / "assets",
         nome
     )
+
+
+
+# ==========================================
+# ADMINISTRACAO (autenticacao no servidor)
+# ==========================================
+
+ADMIN_ATTEMPTS = {}
+ADMIN_LOCK = Lock()
+
+
+def admin_required(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not session.get("kaory_admin"):
+            return jsonify(erro="Acesso restrito."), 401
+        return func(*args, **kwargs)
+    return wrapper
+
+
+@app.get("/admin")
+def admin_page():
+    return send_from_directory(BASE, "Kaory-admin.html")
+
+
+@app.get("/api/admin/status")
+def admin_status():
+    return jsonify(autenticado=bool(session.get("kaory_admin")))
+
+
+@app.post("/api/admin/login")
+def admin_login():
+    senha_hash = os.getenv("KAORY_ADMIN_PASSWORD_HASH", "")
+    if not senha_hash or not os.getenv("KAORY_SESSION_SECRET"):
+        return jsonify(erro="Admin não configurado no Render."), 503
+    ip = request.remote_addr or "unknown"
+    agora = time.monotonic()
+    with ADMIN_LOCK:
+        for k, v in list(ADMIN_ATTEMPTS.items()):
+            if agora - v["inicio"] > 900:
+                ADMIN_ATTEMPTS.pop(k, None)
+        item = ADMIN_ATTEMPTS.setdefault(ip, {"inicio": agora, "falhas": 0})
+        if item["falhas"] >= 5:
+            return jsonify(erro="Muitas tentativas. Aguarde 15 minutos."), 429
+    dados = request.get_json(silent=True)
+    senha = dados.get("senha", "") if isinstance(dados, dict) else ""
+    valido = isinstance(senha, str) and len(senha) <= 256 and check_password_hash(senha_hash, senha)
+    if not valido:
+        with ADMIN_LOCK:
+            ADMIN_ATTEMPTS[ip]["falhas"] += 1
+        return jsonify(erro="Senha inválida."), 401
+    with ADMIN_LOCK:
+        ADMIN_ATTEMPTS.pop(ip, None)
+    session.clear()
+    session["kaory_admin"] = True
+    session.permanent = True
+    app.permanent_session_lifetime = 3600
+    return jsonify(sucesso=True)
+
+
+@app.post("/api/admin/logout")
+@admin_required
+def admin_logout():
+    session.clear()
+    return jsonify(sucesso=True)
+
+
+@app.delete("/api/admin/galeria/<int:arte_id>")
+@admin_required
+def admin_remover_arte(arte_id):
+    from galeria import conectar
+    try:
+        with conectar() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM kaory_fanarts WHERE id=%s RETURNING id", (arte_id,))
+                removido = cur.fetchone()
+        if not removido:
+            return jsonify(erro="Arte não encontrada."), 404
+        return jsonify(sucesso=True)
+    except Exception:
+        app.logger.exception("Erro ao remover fanart pelo painel")
+        return jsonify(erro="Falha ao remover fanart."), 503
 
 
 # ==========================================
