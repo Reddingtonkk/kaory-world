@@ -129,8 +129,8 @@ emotes do Discord ou da Twitch.
 
 Use emojis comuns no lugar deles.
 
-Prefira respostas concisas, mas desenvolva
-quando o visitante pedir mais detalhes.
+Converse de forma natural e expressiva, sem encurtar respostas artificialmente.
+Desenvolva os assuntos conforme a conversa pedir.
 """
 
 
@@ -190,7 +190,40 @@ def cabecalhos_seguranca(resposta):
         "X-Frame-Options"
     ] = "SAMEORIGIN"
 
+    resposta.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    resposta.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data:; "
+        "media-src 'self'; "
+        "connect-src 'self'; "
+        "object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
+    )
+    if os.getenv("RENDER") or request.is_secure:
+        resposta.headers["Strict-Transport-Security"] = "max-age=31536000"
     return resposta
+
+
+@app.before_request
+def bloquear_origem_externa():
+    if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+        return None
+    origem = request.headers.get("Origin")
+    if origem:
+        from urllib.parse import urlsplit
+        try:
+            parsed = urlsplit(origem)
+            if (parsed.scheme not in ("http", "https") or
+                parsed.netloc.lower() != request.host.lower() or
+                parsed.path not in ("", "/") or parsed.query or parsed.fragment):
+                return jsonify(erro="Origem não permitida."), 403
+        except ValueError:
+            return jsonify(erro="Origem inválida."), 403
+    if request.headers.get("Sec-Fetch-Site") == "cross-site":
+        return jsonify(erro="Requisição externa bloqueada."), 403
+    return None
 
 
 @app.errorhandler(RequestEntityTooLarge)
@@ -319,6 +352,12 @@ def conversar():
     agora = time.monotonic()
 
     with controle:
+        # Mantém a memória limitada mesmo com cookies descartáveis.
+        if len(ultimos_pedidos) > 3000:
+            antigos = sorted(ultimos_pedidos, key=ultimos_pedidos.get)[:1000]
+            for chave in antigos:
+                ultimos_pedidos.pop(chave, None)
+                historicos.pop(chave, None)
         anterior = ultimos_pedidos.get(
             sessao,
             0
@@ -373,7 +412,7 @@ def conversar():
                     + "\n\n"
                     + INSTRUCOES_SITE
                 ),
-                max_output_tokens=1200
+                max_output_tokens=4096
             )
         )
 
@@ -421,7 +460,7 @@ def conversar():
             sessao,
             httponly=True,
             samesite="Lax",
-            secure=request.is_secure,
+            secure=bool(os.getenv("RENDER")) or request.is_secure,
             max_age=86400
         )
 
