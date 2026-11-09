@@ -117,9 +117,6 @@ def identidade_ip():
     segredo = os.environ.get("GALLERY_HASH_SECRET")
 
     if not segredo:
-        segredo = os.environ.get("GALLERY_ADMIN_KEY")
-
-    if not segredo:
         raise RuntimeError(
             "Configure GALLERY_HASH_SECRET."
         )
