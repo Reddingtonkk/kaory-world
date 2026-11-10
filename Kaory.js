@@ -182,7 +182,7 @@
 
     async function perguntarKaory(mensagem) {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 60000);
+        const timeout = setTimeout(() => controller.abort(), 120000);
 
         try {
             const response = await fetch("/api/chat", {
