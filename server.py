@@ -583,6 +583,7 @@ def conversar():
         )
     )
 
+    inicio_gemini = time.monotonic()
     try:
         resultado = client.models.generate_content(
             model=MODEL,
@@ -597,6 +598,7 @@ def conversar():
             )
         )
 
+        app.logger.info("Gemini respondeu em %.2fs", time.monotonic() - inicio_gemini)
         resposta = (
             resultado.text or ""
         ).strip()
@@ -609,7 +611,7 @@ def conversar():
 
     except Exception:
         app.logger.exception(
-            "Erro ao consultar Gemini."
+            "Erro ao consultar Gemini após %.2fs.", time.monotonic() - inicio_gemini
         )
 
         return jsonify(
