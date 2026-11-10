@@ -48,7 +48,7 @@ API_KEY = os.getenv("GEMINI_API_KEY")
 
 MODEL = os.getenv(
     "GEMINI_MODEL",
-    "gemini-3-flash-preview"
+    "gemini-3.8-flash"
 )
 
 if not API_KEY:
