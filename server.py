@@ -1,5 +1,8 @@
 
 import ast
+import base64
+import hashlib
+import struct
 import logging
 import os
 import secrets
@@ -14,11 +17,15 @@ from flask import (
     Flask,
     jsonify,
     request,
-    send_from_directory
+    send_from_directory,
+    session
 )
 from google import genai
 from google.genai import types
 from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.security import check_password_hash
+from functools import wraps
+import hmac
 
 from ranking import ranking_bp, preparar_banco
 from galeria import galeria_bp, preparar_galeria
@@ -41,7 +48,7 @@ API_KEY = os.getenv("GEMINI_API_KEY")
 
 MODEL = os.getenv(
     "GEMINI_MODEL",
-    "gemini-3-flash-preview"
+    "gemini-3.8-flash"
 )
 
 if not API_KEY:
@@ -147,7 +154,12 @@ app = Flask(
     static_folder=None
 )
 
+app.secret_key = os.getenv("KAORY_SESSION_SECRET") or secrets.token_hex(32)
+
 app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=bool(os.getenv("RENDER")),
     MAX_CONTENT_LENGTH=MAX_REQUISICAO,
 
     # Limite para campos comuns do formulário,
@@ -190,7 +202,40 @@ def cabecalhos_seguranca(resposta):
         "X-Frame-Options"
     ] = "SAMEORIGIN"
 
+    resposta.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    resposta.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data:; "
+        "media-src 'self'; "
+        "connect-src 'self'; "
+        "object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
+    )
+    if os.getenv("RENDER") or request.is_secure:
+        resposta.headers["Strict-Transport-Security"] = "max-age=31536000"
     return resposta
+
+
+@app.before_request
+def bloquear_origem_externa():
+    if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+        return None
+    origem = request.headers.get("Origin")
+    if origem:
+        from urllib.parse import urlsplit
+        try:
+            parsed = urlsplit(origem)
+            if (parsed.scheme not in ("http", "https") or
+                parsed.netloc.lower() != request.host.lower() or
+                parsed.path not in ("", "/") or parsed.query or parsed.fragment):
+                return jsonify(erro="Origem não permitida."), 403
+        except ValueError:
+            return jsonify(erro="Origem inválida."), 403
+    if request.headers.get("Sec-Fetch-Site") == "cross-site":
+        return jsonify(erro="Requisição externa bloqueada."), 403
+    return None
 
 
 @app.errorhandler(RequestEntityTooLarge)
@@ -240,6 +285,7 @@ def arquivos_site(nome):
         "Kaory-entrada.js",
         "Kaory-diversao.js",
         "Kaory-galeria.js",
+        "Kaory-admin.js",
     }
 
     if nome not in permitidos:
@@ -259,6 +305,174 @@ def assets(nome):
         BASE / "assets",
         nome
     )
+
+
+
+# ==========================================
+# ADMINISTRACAO (autenticacao no servidor)
+# ==========================================
+
+ADMIN_ATTEMPTS = {}
+ADMIN_LOCK = Lock()
+
+
+def verificar_totp(segredo, codigo):
+    """Valida TOTP SHA-1 de 6 dígitos (Google Authenticator)."""
+    if not isinstance(codigo, str) or len(codigo) != 6 or not codigo.isascii() or not codigo.isdigit():
+        return False
+    try:
+        chave = base64.b32decode(segredo.strip().upper().replace(" ", ""), casefold=True)
+        if len(chave) < 20:
+            return False
+    except (ValueError, base64.binascii.Error):
+        return False
+    passo = int(time.time()) // 30
+    for contador in (passo - 1, passo, passo + 1):
+        digest = hmac.new(chave, struct.pack(">Q", contador), hashlib.sha1).digest()
+        offset = digest[-1] & 15
+        valor = (struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7fffffff) % 1000000
+        if hmac.compare_digest(f"{valor:06d}", codigo):
+            return True
+    return False
+
+
+
+def admin_required(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not session.get("kaory_admin"):
+            return jsonify(erro="Acesso restrito."), 401
+        return func(*args, **kwargs)
+    return wrapper
+
+
+@app.get("/admin")
+def admin_page():
+    return send_from_directory(BASE, "Kaory-admin.html")
+
+
+@app.get("/api/admin/status")
+def admin_status():
+    return jsonify(autenticado=bool(session.get("kaory_admin")))
+
+
+@app.post("/api/admin/login")
+def admin_login():
+    senha_hash = os.getenv("KAORY_ADMIN_PASSWORD_HASH", "")
+    totp_secret = os.getenv("KAORY_ADMIN_TOTP_SECRET", "")
+    if not senha_hash or not totp_secret or not os.getenv("KAORY_SESSION_SECRET"):
+        return jsonify(erro="Admin não configurado no Render."), 503
+    ip = request.remote_addr or "unknown"
+    agora = time.monotonic()
+    with ADMIN_LOCK:
+        for k, v in list(ADMIN_ATTEMPTS.items()):
+            if agora - v["inicio"] > 900:
+                ADMIN_ATTEMPTS.pop(k, None)
+        item = ADMIN_ATTEMPTS.setdefault(ip, {"inicio": agora, "falhas": 0})
+        if item["falhas"] >= 5:
+            return jsonify(erro="Muitas tentativas. Aguarde 15 minutos."), 429
+    dados = request.get_json(silent=True)
+    senha = dados.get("senha", "") if isinstance(dados, dict) else ""
+    codigo = dados.get("codigo", "") if isinstance(dados, dict) else ""
+    valido = (isinstance(senha, str) and len(senha) <= 256
+              and check_password_hash(senha_hash, senha)
+              and verificar_totp(totp_secret, codigo))
+    if not valido:
+        with ADMIN_LOCK:
+            ADMIN_ATTEMPTS[ip]["falhas"] += 1
+        return jsonify(erro="Credenciais inválidas."), 401
+    with ADMIN_LOCK:
+        ADMIN_ATTEMPTS.pop(ip, None)
+    session.clear()
+    session["kaory_admin"] = True
+    session.permanent = True
+    app.permanent_session_lifetime = 3600
+    return jsonify(sucesso=True)
+
+
+@app.post("/api/admin/logout")
+@admin_required
+def admin_logout():
+    session.clear()
+    return jsonify(sucesso=True)
+
+
+
+@app.get("/api/admin/galeria")
+@admin_required
+def admin_listar_artes():
+    from galeria import conectar
+    try:
+        with conectar() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""SELECT id, nick, titulo, status, criada_em
+                               FROM kaory_fanarts
+                               ORDER BY CASE WHEN status='pendente' THEN 0 ELSE 1 END,
+                                        criada_em DESC LIMIT 100""")
+                artes = [{"id": a[0], "nick": a[1], "titulo": a[2],
+                          "status": a[3], "data": a[4].isoformat()}
+                         for a in cur.fetchall()]
+        return jsonify(artes=artes)
+    except Exception:
+        app.logger.exception("Erro ao listar fanarts admin")
+        return jsonify(erro="Não foi possível listar fanarts."), 503
+
+
+@app.get("/api/admin/galeria/imagem/<int:arte_id>")
+@admin_required
+def admin_imagem_arte(arte_id):
+    from galeria import conectar
+    from flask import Response
+    try:
+        with conectar() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT imagem FROM kaory_fanarts WHERE id=%s", (arte_id,))
+                registro = cur.fetchone()
+        if not registro:
+            return jsonify(erro="Arte não encontrada."), 404
+        resposta = Response(bytes(registro[0]), mimetype="image/webp")
+        resposta.headers["Cache-Control"] = "private, no-store"
+        resposta.headers["X-Content-Type-Options"] = "nosniff"
+        resposta.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        return resposta
+    except Exception:
+        app.logger.exception("Erro ao abrir fanart admin")
+        return jsonify(erro="Imagem indisponível."), 503
+
+
+@app.post("/api/admin/galeria/<int:arte_id>/aprovar")
+@admin_required
+def admin_aprovar_arte(arte_id):
+    from galeria import conectar
+    try:
+        with conectar() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""UPDATE kaory_fanarts SET status='aprovada'
+                               WHERE id=%s AND status='pendente' RETURNING id""", (arte_id,))
+                alterada = cur.fetchone()
+        if not alterada:
+            return jsonify(erro="Fanart pendente não encontrada."), 404
+        return jsonify(sucesso=True)
+    except Exception:
+        app.logger.exception("Erro ao aprovar fanart")
+        return jsonify(erro="Falha ao aprovar fanart."), 503
+
+
+@app.delete("/api/admin/galeria/<int:arte_id>")
+@admin_required
+def admin_remover_arte(arte_id):
+    from galeria import conectar
+    try:
+        with conectar() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM kaory_fanarts WHERE id=%s RETURNING id", (arte_id,))
+                removido = cur.fetchone()
+        if not removido:
+            return jsonify(erro="Arte não encontrada."), 404
+        return jsonify(sucesso=True)
+    except Exception:
+        app.logger.exception("Erro ao remover fanart pelo painel")
+        return jsonify(erro="Falha ao remover fanart."), 503
 
 
 # ==========================================
@@ -319,6 +533,11 @@ def conversar():
     agora = time.monotonic()
 
     with controle:
+        if len(ultimos_pedidos) > 3000:
+            antigos = sorted(ultimos_pedidos, key=ultimos_pedidos.get)[:1000]
+            for chave in antigos:
+                ultimos_pedidos.pop(chave, None)
+                historicos.pop(chave, None)
         anterior = ultimos_pedidos.get(
             sessao,
             0
@@ -421,7 +640,7 @@ def conversar():
             sessao,
             httponly=True,
             samesite="Lax",
-            secure=request.is_secure,
+            secure=bool(os.getenv("RENDER")) or request.is_secure,
             max_age=86400
         )
 

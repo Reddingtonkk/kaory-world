@@ -17,7 +17,10 @@ DURACAO = 30
 LIMITE_PONTOS = 300
 
 PARTIDAS = {}
+INICIOS = {}
 LOCK = Lock()
+MAX_PARTIDAS_ATIVAS = 2500
+MAX_INICIOS_POR_MINUTO = 12
 
 
 def conectar():
@@ -93,10 +96,21 @@ def iniciar_jogo():
         ), 503
 
     token = secrets.token_urlsafe(32)
+    identidade = request.remote_addr or "desconhecido"
 
     with LOCK:
         limpar_partidas()
-
+        agora = time.monotonic()
+        for ip, fila in list(INICIOS.items()):
+            fila[:] = [t for t in fila if agora - t < 60]
+            if not fila:
+                del INICIOS[ip]
+        fila = INICIOS.setdefault(identidade, [])
+        if len(fila) >= MAX_INICIOS_POR_MINUTO:
+            return jsonify(erro="Muitas partidas iniciadas. Aguarde um minuto."), 429
+        if len(PARTIDAS) >= MAX_PARTIDAS_ATIVAS:
+            return jsonify(erro="Muitas partidas em andamento. Tente novamente."), 503
+        fila.append(agora)
         PARTIDAS[token] = {
             "nick": nick,
             "inicio": time.monotonic()

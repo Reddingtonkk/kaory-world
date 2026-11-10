@@ -579,7 +579,7 @@
         const submit = create(
             "button",
             "kg-button",
-            "Publicar fanart 💜"
+            "Enviar para aprovação 💜"
         );
 
         submit.type = "submit";
@@ -606,7 +606,7 @@
                 if (!selected) return;
 
                 submit.disabled = true;
-                submit.textContent = "Publicando... 🥝";
+                submit.textContent = "Enviando... 🥝";
 
                 message.textContent =
                     "Validando a imagem...";
@@ -629,7 +629,7 @@
                 );
 
                 try {
-                    await requestJSON(
+                    const envio = await requestJSON(
                         "/api/galeria/enviar",
                         {
                             method: "POST",
@@ -646,6 +646,7 @@
 
                     clearPreview();
                     await showGallery();
+                    alert(envio.mensagem || "Fanart enviada para aprovação!");
 
                 } catch (error) {
                     message.textContent = error.message;

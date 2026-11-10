@@ -64,6 +64,7 @@ def preparar_galeria():
                     )
                 """)
 
+                cur.execute("ALTER TABLE kaory_fanarts ADD COLUMN IF NOT EXISTS status VARCHAR(12) NOT NULL DEFAULT 'aprovada'")
                 cur.execute("""
                     CREATE INDEX IF NOT EXISTS
                     idx_kaory_fanarts_data
@@ -115,9 +116,6 @@ def identidade_ip():
     ip = request.remote_addr or "desconhecido"
 
     segredo = os.environ.get("GALLERY_HASH_SECRET")
-
-    if not segredo:
-        segredo = os.environ.get("GALLERY_ADMIN_KEY")
 
     if not segredo:
         raise RuntimeError(
@@ -274,6 +272,7 @@ def listar_artes():
                 cur.execute("""
                     SELECT COUNT(*)
                     FROM kaory_fanarts
+                    WHERE status = 'aprovada'
                 """)
 
                 total = cur.fetchone()[0]
@@ -281,6 +280,7 @@ def listar_artes():
                 cur.execute("""
                     SELECT id, nick, titulo, criada_em
                     FROM kaory_fanarts
+                    WHERE status = 'aprovada'
                     ORDER BY criada_em DESC, id DESC
                     LIMIT %s OFFSET %s
                 """, (limite, offset))
@@ -320,7 +320,7 @@ def imagem_arte(arte_id):
                 cur.execute("""
                     SELECT imagem
                     FROM kaory_fanarts
-                    WHERE id = %s
+                    WHERE id = %s AND status = 'aprovada'
                 """, (arte_id,))
 
                 resultado = cur.fetchone()
@@ -456,9 +456,9 @@ def enviar_arte():
                             titulo,
                             imagem,
                             tamanho,
-                            ip_hash
+                            ip_hash, status
                         )
-                    VALUES (%s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, 'pendente')
                     RETURNING id
                 """, (
                     nick,
@@ -473,7 +473,7 @@ def enviar_arte():
         return jsonify(
             sucesso=True,
             id=arte_id,
-            mensagem="Fanart publicada! 💜🥝"
+            mensagem="Fanart enviada! Aguarde aprovação da moderação. 💜🥝"
         ), 201
 
     except Exception:

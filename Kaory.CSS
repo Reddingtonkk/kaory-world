@@ -199,3 +199,8 @@ h1 em { font-style: normal; color: var(--kiwi); }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   .reveal { opacity: 1; transform: none; }
 }
+
+/* Logos sociais vetoriais, mantendo as animações dos cards. */
+.world-icon.social-icon { display: inline-flex; width: 42px; height: 42px; align-items: center; justify-content: center; }
+.world-icon.social-icon svg { display: block; width: 100%; height: 100%; }
+.tiktok-card { --glow: rgba(120, 210, 218, .24); }
