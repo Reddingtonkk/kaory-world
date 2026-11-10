@@ -1,5 +1,8 @@
 
 import ast
+import base64
+import hashlib
+import struct
 import logging
 import os
 import secrets
@@ -313,6 +316,27 @@ ADMIN_ATTEMPTS = {}
 ADMIN_LOCK = Lock()
 
 
+def verificar_totp(segredo, codigo):
+    """Valida TOTP SHA-1 de 6 dígitos (Google Authenticator)."""
+    if not isinstance(codigo, str) or len(codigo) != 6 or not codigo.isascii() or not codigo.isdigit():
+        return False
+    try:
+        chave = base64.b32decode(segredo.strip().upper().replace(" ", ""), casefold=True)
+        if len(chave) < 20:
+            return False
+    except (ValueError, base64.binascii.Error):
+        return False
+    passo = int(time.time()) // 30
+    for contador in (passo - 1, passo, passo + 1):
+        digest = hmac.new(chave, struct.pack(">Q", contador), hashlib.sha1).digest()
+        offset = digest[-1] & 15
+        valor = (struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7fffffff) % 1000000
+        if hmac.compare_digest(f"{valor:06d}", codigo):
+            return True
+    return False
+
+
+
 def admin_required(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -335,7 +359,8 @@ def admin_status():
 @app.post("/api/admin/login")
 def admin_login():
     senha_hash = os.getenv("KAORY_ADMIN_PASSWORD_HASH", "")
-    if not senha_hash or not os.getenv("KAORY_SESSION_SECRET"):
+    totp_secret = os.getenv("KAORY_ADMIN_TOTP_SECRET", "")
+    if not senha_hash or not totp_secret or not os.getenv("KAORY_SESSION_SECRET"):
         return jsonify(erro="Admin não configurado no Render."), 503
     ip = request.remote_addr or "unknown"
     agora = time.monotonic()
@@ -348,11 +373,14 @@ def admin_login():
             return jsonify(erro="Muitas tentativas. Aguarde 15 minutos."), 429
     dados = request.get_json(silent=True)
     senha = dados.get("senha", "") if isinstance(dados, dict) else ""
-    valido = isinstance(senha, str) and len(senha) <= 256 and check_password_hash(senha_hash, senha)
+    codigo = dados.get("codigo", "") if isinstance(dados, dict) else ""
+    valido = (isinstance(senha, str) and len(senha) <= 256
+              and check_password_hash(senha_hash, senha)
+              and verificar_totp(totp_secret, codigo))
     if not valido:
         with ADMIN_LOCK:
             ADMIN_ATTEMPTS[ip]["falhas"] += 1
-        return jsonify(erro="Senha inválida."), 401
+        return jsonify(erro="Credenciais inválidas."), 401
     with ADMIN_LOCK:
         ADMIN_ATTEMPTS.pop(ip, None)
     session.clear()
