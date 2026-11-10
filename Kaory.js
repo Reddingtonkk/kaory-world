@@ -162,12 +162,12 @@
 
                 chatMessages.scrollTop = chatMessages.scrollHeight;
 
-                let interval = 12;
+                let interval = 42;
 
                 if (char === "." || char === "!" || char === "?") {
-                    interval = 65;
+                    interval = 170;
                 } else if (char === ",") {
-                    interval = 35;
+                    interval = 95;
                 }
 
                 await delay(interval);
@@ -182,7 +182,7 @@
 
     async function perguntarKaory(mensagem) {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 120000);
+        const timeout = setTimeout(() => controller.abort(), 60000);
 
         try {
             const response = await fetch("/api/chat", {
@@ -273,7 +273,7 @@
 
             const texto = error.name === "AbortError"
                 ? "Demorei demais, kiwi! Tenta novamente. 💜"
-                : (error.message || "Minha magia deu uma travadinha! Tenta de novo. 🥝");
+                : "Minha magia deu uma travadinha! Tenta de novo. 🥝";
 
             await typeMessage(texto);
         } finally {
