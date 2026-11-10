@@ -22,6 +22,7 @@ from flask import (
 )
 from google import genai
 from google.genai import types
+from google.genai.errors import ServerError
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash
 from functools import wraps
@@ -608,6 +609,13 @@ def conversar():
                 "Minha magia falhou "
                 "por um instante! 🥝"
             )
+
+    except ServerError as exc:
+        if getattr(exc, "code", None) == 503 or getattr(exc, "status_code", None) == 503:
+            app.logger.warning("Gemini indisponível por alta demanda após %.2fs.", time.monotonic() - inicio_gemini)
+            return jsonify(erro="O Gemini está sobrecarregado agora. Aguarde um pouco e tente novamente. 🥝"), 503
+        app.logger.exception("Erro do servidor Gemini após %.2fs.", time.monotonic() - inicio_gemini)
+        return jsonify(erro="Serviço de IA temporariamente indisponível."), 502
 
     except Exception:
         app.logger.exception(
