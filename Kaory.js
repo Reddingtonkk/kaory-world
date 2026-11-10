@@ -162,12 +162,12 @@
 
                 chatMessages.scrollTop = chatMessages.scrollHeight;
 
-                let interval = 42;
+                let interval = 12;
 
                 if (char === "." || char === "!" || char === "?") {
-                    interval = 170;
+                    interval = 65;
                 } else if (char === ",") {
-                    interval = 95;
+                    interval = 35;
                 }
 
                 await delay(interval);
