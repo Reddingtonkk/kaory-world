@@ -273,7 +273,7 @@
 
             const texto = error.name === "AbortError"
                 ? "Demorei demais, kiwi! Tenta novamente. 💜"
-                : "Minha magia deu uma travadinha! Tenta de novo. 🥝";
+                : (error.message || "Minha magia deu uma travadinha! Tenta de novo. 🥝");
 
             await typeMessage(texto);
         } finally {
