@@ -22,7 +22,6 @@ from flask import (
 )
 from google import genai
 from google.genai import types
-from google.genai.errors import ServerError
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash
 from functools import wraps
@@ -137,8 +136,8 @@ emotes do Discord ou da Twitch.
 
 Use emojis comuns no lugar deles.
 
-Converse de forma natural e expressiva, sem encurtar respostas artificialmente.
-Desenvolva os assuntos conforme a conversa pedir.
+Prefira respostas concisas, mas desenvolva
+quando o visitante pedir mais detalhes.
 """
 
 
@@ -534,7 +533,6 @@ def conversar():
     agora = time.monotonic()
 
     with controle:
-        # Mantém a memória limitada mesmo com cookies descartáveis.
         if len(ultimos_pedidos) > 3000:
             antigos = sorted(ultimos_pedidos, key=ultimos_pedidos.get)[:1000]
             for chave in antigos:
@@ -584,7 +582,6 @@ def conversar():
         )
     )
 
-    inicio_gemini = time.monotonic()
     try:
         resultado = client.models.generate_content(
             model=MODEL,
@@ -595,11 +592,10 @@ def conversar():
                     + "\n\n"
                     + INSTRUCOES_SITE
                 ),
-                max_output_tokens=4096
+                max_output_tokens=1200
             )
         )
 
-        app.logger.info("Gemini respondeu em %.2fs", time.monotonic() - inicio_gemini)
         resposta = (
             resultado.text or ""
         ).strip()
@@ -610,16 +606,9 @@ def conversar():
                 "por um instante! 🥝"
             )
 
-    except ServerError as exc:
-        if getattr(exc, "code", None) == 503 or getattr(exc, "status_code", None) == 503:
-            app.logger.warning("Gemini indisponível por alta demanda após %.2fs.", time.monotonic() - inicio_gemini)
-            return jsonify(erro="O Gemini está sobrecarregado agora. Aguarde um pouco e tente novamente. 🥝"), 503
-        app.logger.exception("Erro do servidor Gemini após %.2fs.", time.monotonic() - inicio_gemini)
-        return jsonify(erro="Serviço de IA temporariamente indisponível."), 502
-
     except Exception:
         app.logger.exception(
-            "Erro ao consultar Gemini após %.2fs.", time.monotonic() - inicio_gemini
+            "Erro ao consultar Gemini."
         )
 
         return jsonify(
