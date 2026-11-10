@@ -320,7 +320,7 @@ def imagem_arte(arte_id):
                 cur.execute("""
                     SELECT imagem
                     FROM kaory_fanarts
-                    WHERE id = %s
+                    WHERE id = %s AND status = 'aprovada'
                 """, (arte_id,))
 
                 resultado = cur.fetchone()
