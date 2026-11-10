@@ -397,6 +397,67 @@ def admin_logout():
     return jsonify(sucesso=True)
 
 
+
+@app.get("/api/admin/galeria")
+@admin_required
+def admin_listar_artes():
+    from galeria import conectar
+    try:
+        with conectar() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""SELECT id, nick, titulo, status, criada_em
+                               FROM kaory_fanarts
+                               ORDER BY CASE WHEN status='pendente' THEN 0 ELSE 1 END,
+                                        criada_em DESC LIMIT 100""")
+                artes = [{"id": a[0], "nick": a[1], "titulo": a[2],
+                          "status": a[3], "data": a[4].isoformat()}
+                         for a in cur.fetchall()]
+        return jsonify(artes=artes)
+    except Exception:
+        app.logger.exception("Erro ao listar fanarts admin")
+        return jsonify(erro="Não foi possível listar fanarts."), 503
+
+
+@app.get("/api/admin/galeria/imagem/<int:arte_id>")
+@admin_required
+def admin_imagem_arte(arte_id):
+    from galeria import conectar
+    from flask import Response
+    try:
+        with conectar() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT imagem FROM kaory_fanarts WHERE id=%s", (arte_id,))
+                registro = cur.fetchone()
+        if not registro:
+            return jsonify(erro="Arte não encontrada."), 404
+        resposta = Response(bytes(registro[0]), mimetype="image/webp")
+        resposta.headers["Cache-Control"] = "private, no-store"
+        resposta.headers["X-Content-Type-Options"] = "nosniff"
+        resposta.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        return resposta
+    except Exception:
+        app.logger.exception("Erro ao abrir fanart admin")
+        return jsonify(erro="Imagem indisponível."), 503
+
+
+@app.post("/api/admin/galeria/<int:arte_id>/aprovar")
+@admin_required
+def admin_aprovar_arte(arte_id):
+    from galeria import conectar
+    try:
+        with conectar() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""UPDATE kaory_fanarts SET status='aprovada'
+                               WHERE id=%s AND status='pendente' RETURNING id""", (arte_id,))
+                alterada = cur.fetchone()
+        if not alterada:
+            return jsonify(erro="Fanart pendente não encontrada."), 404
+        return jsonify(sucesso=True)
+    except Exception:
+        app.logger.exception("Erro ao aprovar fanart")
+        return jsonify(erro="Falha ao aprovar fanart."), 503
+
+
 @app.delete("/api/admin/galeria/<int:arte_id>")
 @admin_required
 def admin_remover_arte(arte_id):
